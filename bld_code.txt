@@ -63,13 +63,31 @@ copy_seed(){
     done
 }
 
-find_seed(){
+get_seed(){
+    # recursive search of seed.groovy for a Jenkinsfile
+    # Lookup in same or higher level directories
 
-    if [ -z "${SEED_PATH}" ]; then
-        if [ "${GERRIT_REFSPEC}" = "origin/master" ]; then
-            echo "ERROR: empty SEED_PATH parameter."
-            exit 1
-        fi
+    SEED=''
+    dir_path=$1
+    set +e
+    FILE=`ls ${WORKSPACE}/${dir_path}/ | egrep "*seed*.groovy"`
+    if [ $FILE ]; then
+       # found seed for the Jenkinsfile
+       SEED="${dir_path}/$FILE"
+        return
+    fi
+    up_dir=$(dirname ${dir_path})
+    if [ ${up_dir} == "." ]; then
+        # reached top level dir
+        echo "ERROR: seed file not found in ${dir_path}/..."
+        exit 1
+    fi
+
+    # check seed in one level higher directory
+    get_seed ${up_dir}
+}
+
+find_seed(){
 
         echo "INFO: Looking for seed.groovy file(s) in refspec changes..."
         LAST_2COMMITS=`git log -2 --reverse --pretty=format:%H`
@@ -103,15 +121,14 @@ find_seed(){
     echo "INFO: SEED_PATH is [${SEED_PATH}]"
 }
 
-
-    fi
-}
-
 ######MAIN#####
-
+git clone git@github.com:Alpharomeo180/TST_JNKNS_BLD.git
     find_seed
-
-    copy_seed ${SEED_PATH}
+		if [[ ! ${SEED_PATH} =~ ^tests/ ]]; then
+			copy_seed ${SEED_PATH}
+		else
+	echo "Not copying seed(s), because it is in tests/ directory"
+    fi
 
 # Empty space for DSL script debug information:
 echo -e "=================================================\n"
