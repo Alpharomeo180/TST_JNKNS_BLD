@@ -1,47 +1,18 @@
 #!/bin/bash
 
 set -xe
-
-get_seed(){
-    # recursive search of seed.groovy for a Jenkinsfile
-    # Lookup in same or higher level directories
-
-    SEED=''
-    dir_path=$1
-    set +e
-    FILE=`ls ${WORKSPACE}/${dir_path}/ | egrep "*seed*.groovy"`
-    if [ $FILE ]; then
-       # found seed for the Jenkinsfile
-       SEED="${dir_path}/$FILE"
-        return
-    fi
-    up_dir=$(dirname ${dir_path})
-    if [ ${up_dir} == "." ]; then
-        # reached top level dir
-        echo "ERROR: seed file not found in ${dir_path}/..."
-        exit 1
-    fi
-
-    # check seed in one level higher directory
-    get_seed ${up_dir}
-}
-
 copy_seed(){
     # Split comma separated seed list
     # copy all seed.groovy files with prefixed dir name
     # param - comma separated relative paths of seed.groovy
-
     # "${BUILD_NUMBER}/seed_<seeddirname>.groovy" is a hardcoded path
     # for 'Process Job DSLs' part of the job.
     # See cicd/SuperSeed/seed.groovy file.
-
     mkdir -p ${WORKSPACE}/${BUILD_NUMBER}
     seed_list=$(echo $1 | tr "," "\n")
-
     for seed in $seed_list; do
         seed_file="${WORKSPACE}/${seed}"
         if [ -f ${seed_file} ]; then
-
             # copy dependency file(s)
             grep -E "evaluate\(.+\.groovy.?\)" "${seed_file}" | while read -r match ; do
                 eval dep_file_target_loc=$(echo "$match" | cut -d '"' -f2)
@@ -49,7 +20,6 @@ copy_seed(){
                 dep_file_loc=$(find ${WORKSPACE} -name "$dep_file_name")
                 cp -a $dep_file_loc $dep_file_target_loc
             done
-
             random_string=$(head /dev/urandom | tr -dc A-Za-z | head -c 6)
             # suffix directory name to seed to identify multiple seeds
             # convert '-' to '_' to avoid dsl script name error
@@ -89,13 +59,10 @@ get_seed(){
 
 find_seed(){
 
-        echo "INFO: Looking for seed.groovy file(s) in refspec changes..."
-        LAST_2COMMITS=`git log -2 --reverse --pretty=format:%H`
 
+		LAST_2COMMITS=`git log -2 --reverse --pretty=format:%H`
         # Looking for added or modified seed.groovy files or Jenkinsfiles or only superseed.sh:
-        MODIFIED_FILES=`git diff --name-status --no-renames ${LAST_2COMMITS} | grep -v ^D | egrep "*seed*.groovy|*Jenkinsfile*|superseed.sh" | cut -f2`
-         echo "INFO: changed seed or Jenkinsfile(s): $MODIFIED_FILES"
-        echo "INFO: Building the SEED_PATH for all seed.groovy files..."
+        MODIFIED_FILES=`git diff --name-status --no-renames ${LAST_2COMMITS} | egrep "*.groovy"| cut -f2`
         if [ ! -z "${MODIFIED_FILES}" ]; then
             for file in ${MODIFIED_FILES}; do
 
@@ -110,25 +77,21 @@ find_seed(){
                     SEED_PATH=${SEED_PATH},${SEED}
                 fi
             done
-        else
-            # Fail the build as no seed or jenkinsfile found
-            echo "ERROR: No seed files found"
-            exit 1
-        fi
-    fi
-
+		fi
     export SEED_PATH=$SEED_PATH
     echo "INFO: SEED_PATH is [${SEED_PATH}]"
 }
 
+
+
 ######MAIN#####
 git clone git@github.com:Alpharomeo180/TST_JNKNS_BLD.git
-    find_seed
-		if [[ ! ${SEED_PATH} =~ ^tests/ ]]; then
-			copy_seed ${SEED_PATH}
-		else
-	echo "Not copying seed(s), because it is in tests/ directory"
-    fi
+find_seed
 
+if [[ ! ${SEED_PATH} =~ ^tests/ ]]; then
+   copy_seed ${SEED_PATH}
+else
+   echo "Not copying seed(s), because it is in tests/ directory"
+    fi
 # Empty space for DSL script debug information:
 echo -e "=================================================\n"
